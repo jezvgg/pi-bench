@@ -36,7 +36,11 @@ type BenchReport = {
 
 type BenchData = BenchReport | { error: string; prompt: string };
 
-const CONTENT_DELTAS = new Set(["text_delta", "thinking_delta", "toolcall_delta"]);
+const CONTENT_DELTAS = new Set([
+  "text_delta",
+  "thinking_delta",
+  "toolcall_delta",
+]);
 
 let running = false;
 let t0 = 0;
@@ -47,7 +51,13 @@ const ttfts: number[] = [];
 let genMsSum = 0;
 let outputSum = 0;
 
-let tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+let tokens = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+};
 let cost = 0;
 let toolCount = 0;
 let toolTimeMs = 0;
@@ -75,7 +85,13 @@ function resetState() {
 function handleTurnStart() {
   if (!running) return;
   turnCount++;
-  cur = { turnStart: Date.now(), firstDelta: null, output: 0, genMs: null, ttftMs: null };
+  cur = {
+    turnStart: Date.now(),
+    firstDelta: null,
+    output: 0,
+    genMs: null,
+    ttftMs: null,
+  };
 }
 
 function handleMessageUpdate(event: MessageUpdateEvent) {
@@ -127,7 +143,9 @@ function handleToolEnd(event: ToolExecutionEndEvent) {
 }
 
 function buildReport(): BenchReport {
-  const ttftAvg = ttfts.length ? ttfts.reduce((a, b) => a + b, 0) / ttfts.length : 0;
+  const ttftAvg = ttfts.length
+    ? ttfts.reduce((a, b) => a + b, 0) / ttfts.length
+    : 0;
   const ttftMin = ttfts.length ? Math.min(...ttfts) : 0;
   const ttftMax = ttfts.length ? Math.max(...ttfts) : 0;
   const sec = genMsSum / 1000;
@@ -155,19 +173,31 @@ const renderReport: EntryRenderer<BenchData> = (entry, _options, theme) => {
   const lines = [
     theme.bold("📊 pi-bench"),
     theme.fg("muted", "Prompt: ") + d.prompt,
-    theme.fg("muted", "⏱ wall: ") + theme.bold(fmtMs(d.totalMs)) +
+    theme.fg("muted", "⏱ wall: ") +
+      theme.bold(fmtMs(d.totalMs)) +
       theme.fg("dim", " (" + d.turns + " turns)"),
-    theme.fg("muted", "🤖 latency to model: ") + theme.bold(fmtMs(d.ttft.avg)) +
-      theme.fg("dim", " (min " + fmtMs(d.ttft.min) + " / max " + fmtMs(d.ttft.max) + ")"),
-    theme.fg("muted", "⚡ generation: ") + theme.bold(d.genRate.toFixed(1)) + theme.fg("muted", " tok/s"),
+    theme.fg("muted", "🤖 latency to model: ") +
+      theme.bold(fmtMs(d.ttft.avg)) +
+      theme.fg(
+        "dim",
+        " (min " + fmtMs(d.ttft.min) + " / max " + fmtMs(d.ttft.max) + ")",
+      ),
+    theme.fg("muted", "⚡ generation: ") +
+      theme.bold(d.genRate.toFixed(1)) +
+      theme.fg("muted", " tok/s"),
     theme.fg("muted", "🔢 tokens: ") +
-      theme.fg("accent", String(t.input)) + theme.fg("muted", " in / ") +
-      theme.fg("accent", String(t.output)) + theme.fg("muted", " out / ") +
-      theme.fg("accent", String(t.cacheWrite)) + theme.fg("muted", " cache / ") +
-      theme.bold(String(t.totalTokens)) + theme.fg("muted", " total") +
+      theme.fg("accent", String(t.input)) +
+      theme.fg("muted", " in / ") +
+      theme.fg("accent", String(t.output)) +
+      theme.fg("muted", " out / ") +
+      theme.fg("accent", String(t.cacheWrite)) +
+      theme.fg("muted", " cache / ") +
+      theme.bold(String(t.totalTokens)) +
+      theme.fg("muted", " total") +
       (d.cost > 0 ? theme.fg("dim", " (cost $" + d.cost.toFixed(4) + ")") : ""),
     theme.fg("muted", "🧰 tools: ") +
-      theme.bold(String(d.tools.count)) + theme.fg("muted", " calls, ") +
+      theme.bold(String(d.tools.count)) +
+      theme.fg("muted", " calls, ") +
       theme.bold(fmtMs(d.tools.totalMs)),
   ];
   return new Text(lines.join("\n"), 0, 0);
@@ -185,7 +215,10 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const text = (args ?? "").trim();
       if (!text) {
-        pi.appendEntry("bench-report", { prompt: "", error: "Usage: /bench <prompt>" });
+        pi.appendEntry("bench-report", {
+          prompt: "",
+          error: "Usage: /bench <prompt>",
+        });
         return;
       }
       if (running) {
