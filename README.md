@@ -26,7 +26,7 @@ Then reload the session:
 You may also load it as a one-off:
 
 ```bash
-pi -e npm:@jezv/pi-bench    # or a local checkout: pi -e ./src/index.ts
+pi -e git:github.com/jezvgg/pi-bench    # or a local checkout: pi -e ./src/index.ts
 ```
 
 ## Usage
@@ -64,7 +64,7 @@ runs:
 
 - `turn_start` / `message_update` / `message_end` → turn timing, token usage, TTFT, gen rate.
 - `tool_execution_start` / `tool_execution_end` → tool count and tool wall time.
-- `await sendUserMessage()` starts the run and resolves only once the agent fully settles; the report is built from the accumulated state right after.
+- `sendUserMessage()` dispatches the run (fire-and-forget); the extension gates on `turn_start` (run began), then `waitForIdle()` waits for the agent to fully settle, and the report is built from the accumulated state right after.
 
 The report is rendered with `appendEntry()` + `registerEntryRenderer()` — it lives in the
 session transcript but is **not** part of the LLM context. Run results are not written to a
