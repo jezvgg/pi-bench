@@ -360,7 +360,9 @@ export default function (pi: ExtensionAPI) {
         pi.sendUserMessage(text);
       }
       ctx.ui.notify(
-        text ? "Bench started — /bench-end when done." : "Bench window open — /bench-end when done.",
+        text
+          ? "Bench started — /bench-end when done."
+          : "Bench window open — /bench-end when done.",
         "info",
       );
     },
@@ -370,7 +372,10 @@ export default function (pi: ExtensionAPI) {
     description: "End the manual benchmark window and print the report",
     handler: async (_args, ctx) => {
       if (!manualOpen) {
-        ctx.ui.notify("No manual benchmark window is open (/bench-start).", "warning");
+        ctx.ui.notify(
+          "No manual benchmark window is open (/bench-start).",
+          "warning",
+        );
         return;
       }
       manualOpen = false;
