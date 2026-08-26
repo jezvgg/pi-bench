@@ -234,19 +234,13 @@ export default function (pi: ExtensionAPI) {
       prompt = text;
       t0 = Date.now();
 
+      // sendUserMessage resolves only after the agent fully settles,
+      // so await it (not waitForIdle) to get the report at the END.
       try {
-        pi.sendUserMessage(text);
-      } catch (err) {
+        await pi.sendUserMessage(text);
+      } finally {
         running = false;
-        pi.appendEntry("bench-report", {
-          prompt: text,
-          error: `Failed to start bench: ${err instanceof Error ? err.message : String(err)}`,
-        });
-        return;
       }
-
-      await ctx.waitForIdle();
-      running = false;
       pi.appendEntry("bench-report", buildReport());
     },
   });

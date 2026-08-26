@@ -64,7 +64,7 @@ runs:
 
 - `turn_start` / `message_update` / `message_end` → turn timing, token usage, TTFT, gen rate.
 - `tool_execution_start` / `tool_execution_end` → tool count and tool wall time.
-- `sendUserMessage()` starts the run; `ctx.waitForIdle()` marks the end.
+- `await sendUserMessage()` starts the run and resolves only once the agent fully settles; the report is built from the accumulated state right after.
 
 The report is rendered with `appendEntry()` + `registerEntryRenderer()` — it lives in the
 session transcript but is **not** part of the LLM context. Run results are not written to a
