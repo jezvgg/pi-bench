@@ -7,6 +7,10 @@ prints a report card in the chat when the agent finishes.
 answer but the numbers: tokens spent, latency to the model, generation throughput, tool
 calls, and where the wall-clock time actually went.
 
+> **🤖 Written by an AI agent** — this project (code, config, README, and docs) was
+> written entirely by an AI coding agent, not by a human. Review the source before
+> installing or relying on it.
+
 ## Install
 
 ```bash
