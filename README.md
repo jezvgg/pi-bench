@@ -47,6 +47,22 @@ Prompt: refactor the auth middleware and add tests
 🧰 tools: 23 calls, 28.30s
 ```
 
+### Manual window
+
+`/bench` stops at the **main agent's** settle. If a run spawns async work that
+outlives the main agent (e.g. subagents), that work isn't captured. Use a manual
+window to bracket the whole workflow yourself:
+
+```text
+/bench-start refactor the auth middleware and add tests
+... the agent (and any subagents) work ...
+/bench-end
+```
+
+- `/bench-start [prompt]` opens the window (and sends the prompt if given,
+  without waiting). `/bench-end` closes it and prints the report, wall = `start → end`.
+- `/bench` and the manual window are mutually exclusive.
+
 ## Metrics
 
 | Metric | Definition |
@@ -74,6 +90,9 @@ separate file.
 
 - Token counts reflect assistant-message `usage` only. Nested LLM work done *by* tools
   (e.g. a subagent call) is not included.
+- Subagents run as **separate pi processes**, so their turns/tools/tokens never surface on
+  the parent session's event bus. The `subagents:` card line is read best-effort from the
+  `subagent` tool's result details and may be empty when the shape differs.
 - If the model emits reasoning before text, the recorded latency is to the first reasoning
   token.
 - The extension is meant for the interactive TUI; `/bench` is a session command.
