@@ -62,6 +62,8 @@ let cost = 0;
 let toolCount = 0;
 let toolTimeMs = 0;
 const toolStart = new Map<string, number>();
+// Resolved by turn_start once the dispatched run actually begins.
+let resolveStart: (() => void) | null = null;
 
 function fmtMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "0ms";
@@ -92,6 +94,9 @@ function handleTurnStart() {
     genMs: null,
     ttftMs: null,
   };
+  const resolve = resolveStart;
+  resolveStart = null;
+  resolve?.();
 }
 
 function handleMessageUpdate(event: MessageUpdateEvent) {
@@ -234,10 +239,31 @@ export default function (pi: ExtensionAPI) {
       prompt = text;
       t0 = Date.now();
 
-      // sendUserMessage resolves only after the agent fully settles,
-      // so await it (not waitForIdle) to get the report at the END.
+      // pi.sendUserMessage is fire-and-forget (returns void): the run begins on a
+      // later microtask, so calling ctx.waitForIdle() right after returns early
+      // (the session is still idle) and the report would be built too soon.
+      // Gate on turn_start (run began) — a 60s guard so a dispatch that never
+      // starts (auth/model failure) reports the error instead of hanging.
+      const started = new Promise<void>((resolve) => {
+        resolveStart = resolve;
+      });
       try {
-        await pi.sendUserMessage(text);
+        pi.sendUserMessage(text);
+        const began = await Promise.race([
+          started.then(() => true),
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => resolve(false), 60_000),
+          ), // ponytail: dispatch-failure guard, replace with a real failure signal if pi exposes one
+        ]);
+        if (!began) {
+          pi.appendEntry("bench-report", {
+            prompt: text,
+            error:
+              "Bench run never began (no turn started) — check provider/model auth and retry.",
+          });
+          return;
+        }
+        await ctx.waitForIdle(); // run is active now; waits until it fully settles
       } finally {
         running = false;
       }
