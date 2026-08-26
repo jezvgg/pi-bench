@@ -17,6 +17,13 @@ type TurnStat = {
   ttftMs: number | null;
 };
 
+type SubagentStats = {
+  calls: number;
+  turns: number;
+  tools: number;
+  totalTokens: number;
+};
+
 type BenchReport = {
   prompt: string;
   totalMs: number;
@@ -32,6 +39,7 @@ type BenchReport = {
   };
   cost: number;
   tools: { count: number; totalMs: number };
+  subagents: SubagentStats;
 };
 
 type BenchData = BenchReport | { error: string; prompt: string };
@@ -43,6 +51,7 @@ const CONTENT_DELTAS = new Set([
 ]);
 
 let running = false;
+let manualOpen = false;
 let t0 = 0;
 let prompt = "";
 let turnCount = 0;
@@ -61,6 +70,7 @@ let tokens = {
 let cost = 0;
 let toolCount = 0;
 let toolTimeMs = 0;
+let sub: SubagentStats = { calls: 0, turns: 0, tools: 0, totalTokens: 0 };
 const toolStart = new Map<string, number>();
 // Resolved by turn_start once the dispatched run actually begins.
 let resolveStart: (() => void) | null = null;
@@ -81,6 +91,7 @@ function resetState() {
   cost = 0;
   toolCount = 0;
   toolTimeMs = 0;
+  sub = { calls: 0, turns: 0, tools: 0, totalTokens: 0 };
   toolStart.clear();
 }
 
@@ -137,6 +148,37 @@ function handleToolStart(event: ToolExecutionStartEvent) {
   toolStart.set(event.toolCallId, Date.now());
 }
 
+/**
+ * Subagents run as separate pi processes; their internal turns/tools/tokens never
+ * surface on the parent session's event bus. The only view the parent has is the
+ * `subagent` tool's own `tool_execution_end` result, whose `details` carries the
+ * child's aggregated progress. This is a defensive, best-effort reader — it never
+ * throws and yields 0 when the shape differs.
+ */
+function sumSubagent(result: any): SubagentStats {
+  const s: SubagentStats = { calls: 0, turns: 0, tools: 0, totalTokens: 0 };
+  const details = result?.details;
+  if (!details || typeof details !== "object") return s;
+  const items = Array.isArray(details.results)
+    ? details.results
+    : Array.isArray(details.progress)
+      ? details.progress
+      : [details];
+  for (const it of items) {
+    if (!it || typeof it !== "object") continue;
+    const u = it.usage;
+    if (u && (typeof u.input === "number" || typeof u.output === "number")) {
+      s.totalTokens += (u.input ?? 0) + (u.output ?? 0) + (u.cacheRead ?? 0);
+    } else if (typeof it.tokens === "number") {
+      s.totalTokens += it.tokens;
+    }
+    if (typeof it.toolCount === "number") s.tools += it.toolCount;
+    if (typeof it.turnCount === "number") s.turns += it.turnCount;
+    s.calls++;
+  }
+  return s;
+}
+
 function handleToolEnd(event: ToolExecutionEndEvent) {
   if (!running) return;
   const start = toolStart.get(event.toolCallId);
@@ -145,6 +187,13 @@ function handleToolEnd(event: ToolExecutionEndEvent) {
     toolStart.delete(event.toolCallId);
   }
   toolCount++;
+  if (event.toolName === "subagent") {
+    const s = sumSubagent(event.result);
+    sub.calls += s.calls;
+    sub.turns += s.turns;
+    sub.tools += s.tools;
+    sub.totalTokens += s.totalTokens;
+  }
 }
 
 function buildReport(): BenchReport {
@@ -163,6 +212,7 @@ function buildReport(): BenchReport {
     tokens: { ...tokens },
     cost,
     tools: { count: toolCount, totalMs: toolTimeMs },
+    subagents: { ...sub },
   };
 }
 
@@ -205,6 +255,19 @@ const renderReport: EntryRenderer<BenchData> = (entry, _options, theme) => {
       theme.fg("muted", " calls, ") +
       theme.bold(fmtMs(d.tools.totalMs)),
   ];
+  if (d.subagents.calls > 0) {
+    lines.push(
+      theme.fg("muted", "🧩 subagents: ") +
+        theme.bold(String(d.subagents.calls)) +
+        theme.fg("muted", " calls, ") +
+        theme.bold(String(d.subagents.turns)) +
+        theme.fg("muted", " turns, ") +
+        theme.bold(String(d.subagents.tools)) +
+        theme.fg("muted", " tools, ") +
+        theme.bold(String(d.subagents.totalTokens)) +
+        theme.fg("muted", " tokens"),
+    );
+  }
   return new Text(lines.join("\n"), 0, 0);
 };
 
@@ -229,12 +292,14 @@ export default function (pi: ExtensionAPI) {
       if (running) {
         pi.appendEntry("bench-report", {
           prompt: text,
-          error: "Bench already running — finish the current one first.",
+          error:
+            "Bench already running (auto run or a manual /bench-start window is open).",
         });
         return;
       }
 
       resetState();
+      manualOpen = false;
       running = true;
       prompt = text;
       t0 = Date.now();
@@ -267,6 +332,49 @@ export default function (pi: ExtensionAPI) {
       } finally {
         running = false;
       }
+      pi.appendEntry("bench-report", buildReport());
+    },
+  });
+
+  // Manual window: open with /bench-start, close with /bench-end. Use this when a
+  // run spawns async work that outlives the main agent (e.g. subagents) — the auto
+  // /bench stops at the main agent's settle, but here YOU decide when it's done.
+  pi.registerCommand("bench-start", {
+    description: "Start a manual benchmark window (optionally send a prompt)",
+    handler: async (args, ctx) => {
+      const text = (args ?? "").trim();
+      if (running) {
+        ctx.ui.notify(
+          "Bench already running (auto run or a manual /bench-start window is open).",
+          "warning",
+        );
+        return;
+      }
+      resetState();
+      manualOpen = true;
+      running = true;
+      prompt = text || "(manual window)";
+      t0 = Date.now();
+      if (text) {
+        // Fire-and-forget: do not wait for the run, the user ends it with /bench-end.
+        pi.sendUserMessage(text);
+      }
+      ctx.ui.notify(
+        text ? "Bench started — /bench-end when done." : "Bench window open — /bench-end when done.",
+        "info",
+      );
+    },
+  });
+
+  pi.registerCommand("bench-end", {
+    description: "End the manual benchmark window and print the report",
+    handler: async (_args, ctx) => {
+      if (!manualOpen) {
+        ctx.ui.notify("No manual benchmark window is open (/bench-start).", "warning");
+        return;
+      }
+      manualOpen = false;
+      running = false;
       pi.appendEntry("bench-report", buildReport());
     },
   });
