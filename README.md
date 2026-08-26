@@ -14,7 +14,7 @@ calls, and where the wall-clock time actually went.
 ## Install
 
 ```bash
-pi install git:github.com/jezv/pi-bench
+pi install git:github.com/jezvgg/pi-bench
 ```
 
 Then reload the session:
