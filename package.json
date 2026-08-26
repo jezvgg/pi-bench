@@ -1,0 +1,37 @@
+{
+  "name": "@jezv/pi-bench",
+  "version": "0.1.0",
+  "description": "Benchmark a pi coding agent run: tokens, latency to model, generation rate, tool time, wall clock.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "benchmark",
+    "tokens",
+    "latency",
+    "telemetry"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typescript": "^5.6.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
